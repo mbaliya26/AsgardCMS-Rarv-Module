@@ -1,3 +1,7 @@
 import Vue from 'vue';
 
-Vue.component('ri-datepicker', require('./components/DateRangePicker.vue'));
+import DateRangePicker from "./components/DateRangePicker";
+//import ActionableSelect from "./components/ActionableSelect";
+
+Vue.component('ri-datepicker', DateRangePicker);
+// Vue.component('ri-actionable-select', ActionableSelect);

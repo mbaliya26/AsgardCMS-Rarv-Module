@@ -2,6 +2,7 @@
 
 namespace Modules\Rarv\Table;
 
+use Maatwebsite\Excel\Facades\Excel;
 use Modules\Rarv\Form\FormBuilder;
 
 class TableBuilder
@@ -34,27 +35,32 @@ class TableBuilder
         return $this;
     }
 
-    public function view()
+    public function view($viewPath = 'rarv::table')
     {
         if (!$this->table) {
             throw new \Exception('Table not set', -1);
         }
 
-        $headers = $this->getHeaders();
+        $headers = $this->table->getHeaders();
         $module  = $this->getModule();
         $entity  = $this->getEntity();
+
+        if ($this->table->isExportable() && request()->get('export', 'no') == 'yes') {
+            return Excel::download($this->table->toExportable(), $this->getEntity().time().'.xlsx');
+        }
 
         $buttons = $this->table->getButtons();
         $links = $this->table->getLinks();
         $columns = $this->table->getColumns();
         $records = $this->table->getRecords();
         $filterForm = $this->table->getFilterForm();
+        $isMassDeletable = $this->table->isMassDeletable();
 
         if ($filterForm) {
             $filterForm = $this->formBuilder->setForm($filterForm);
         }
 
-        return view('rarv::table', compact(
+        return view($viewPath, compact(
             'module',
             'entity',
             'records',
@@ -62,32 +68,14 @@ class TableBuilder
             'columns',
             'buttons',
             'links',
-            'filterForm'
+            'filterForm',
+            'isMassDeletable'
         ));
-    }
-
-    public function getHeaders()
-    {
-        $columns = [];
-
-        $module = $this->getModule();
-
-        foreach ($this->table->getColumns() as &$column) {
-            $columns[] = $module . '::' . $this->getEntity() . '.table.columns.' . $column;
-        }
-
-        return $columns;
     }
 
     public function getEntity()
     {
-        $module = explode('.', $this->table->getModule());
-
-        if (isset($module[1])) {
-            return $module[1];
-        }
-
-        return str_plural($module[0]);
+        return $this->table->getEntity();
     }
 
     public function getModule()

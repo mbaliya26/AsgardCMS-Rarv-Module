@@ -2,6 +2,8 @@
 
 namespace Modules\Rarv\Form;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ViewErrorBag;
 
 class Field
@@ -17,6 +19,11 @@ class Field
     protected $column = 12;
 
     protected $permission = true;
+
+    protected $view = null;
+
+    protected $translatable = false;
+    protected $locale = null;
 
     public function __construct($name, $type, $parameters = [])
     {
@@ -86,8 +93,25 @@ class Field
         return $this;
     }
 
-    public function render()
+    public function setView($view)
     {
+        $this->view = $view;
+
+        return $this;
+    }
+
+    public function getView()
+    {
+        return $this->view;
+    }
+
+    public function render($locale = null)
+    {
+        $this->locale = $locale;
+        if ($this->getView()) {
+            return view($this->getView(), ['field' => $this, 'locale' => $locale]);
+        }
+
         $builder = app('form');
 
         $errors = session()->get('errors', new ViewErrorBag);
@@ -95,14 +119,26 @@ class Field
         $parameters = [
             $this->name,
             $this->label,
-            $errors,
+            'errors' => $errors,
         ];
+
+        $parameters[] = '';
+
+        if (in_array('required', $this->rules) && in_array($this->type, ['textGroup', 'textareaGroup'])) {
+            $parameters[]['required'] = 'required';
+        }
 
         if (count($this->getParameters()) > 0) {
             $parameters = $this->getParameters();
         }
 
-        $html = $builder->macroCall($this->type, $parameters);
+        try {
+            $html = $builder->macroCall($this->type, $parameters);
+        } catch (\Exception $e) {
+            Log::error($e);
+            // Its macro
+            $html = $builder->componentCall($this->type, $parameters);
+        }
 
         return $html;
     }
@@ -127,7 +163,7 @@ class Field
         return $this;
     }
 
-    public function setValue($value)
+    public function setValue($value, $entity = null)
     {
         $this->value = $value;
 
@@ -140,7 +176,13 @@ class Field
     public function getValue()
     {
         if (!$this->value) {
-            $this->value = request()->get($this->name, null);
+            if ($this->isTranslatable()) {
+                return data_get(request()->get($this->getLocale(), null), $this->getName());
+            } else {
+                $this->value = request()->get($this->getName(), null);
+            }
+        } elseif ($this->isTranslatable() and isset($this->value[$this->getLocale()])) {
+            return $this->value[$this->getLocale()];
         }
 
         return $this->value;
@@ -216,5 +258,40 @@ class Field
     public function hasPermission()
     {
         return $this->permission;
+    }
+
+    public function filter(Builder $query)
+    {
+        if ($this->getValue() !== null) {
+            $query->where($this->getName(), 'LIKE', '%' . $this->getValue() . '%');
+        }
+    }
+
+    public function setTranslatable($translatable = true)
+    {
+        $this->translatable = $translatable;
+
+        return $this;
+    }
+
+    public function isTranslatable()
+    {
+        return $this->translatable;
+    }
+
+    public function setLocale($l)
+    {
+        $this->locale = $l;
+
+        return $this;
+    }
+
+    public function getLocale()
+    {
+        if (!$this->locale) {
+            return app()->getLocale();
+        }
+
+        return $this->locale;
     }
 }

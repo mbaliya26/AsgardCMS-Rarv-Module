@@ -2,6 +2,8 @@
 
 namespace Modules\Rarv\Form;
 
+use Mcamara\LaravelLocalization\Facades\LaravelLocalization;
+
 class FormBuilder
 {
     protected $mode = 'create';
@@ -46,7 +48,6 @@ class FormBuilder
         if ($this->mode == 'edit' and !$this->form->getModel()) {
             throw new \Exception('Model not set for editing', -1);
         }
-
         $this->form->populateValues();
 
         $module = $this->form->getModule();
@@ -71,13 +72,21 @@ class FormBuilder
             throw new \Exception('Form is not defined', -1);
         }
 
+
         if (!$this->form->validate()) {
             return redirect()->back()->withErrors($this->form->getErrors())->withInput();
         }
 
+        
         $data = [];
         foreach ($this->form->getFields() as &$field) {
-            $data[$field->getName()] = $field->getValue();
+            if ($field->isTranslatable()) {
+                foreach (LaravelLocalization::getSupportedLocales() as $locale => $language) {
+                    $data[$locale][$field->getName()] = $field->setLocale($locale)->getValue();
+                }
+            } else {
+                $data[$field->getName()] = $field->getValue();
+            }
         }
 
         if ($this->mode == 'create') {
@@ -86,12 +95,22 @@ class FormBuilder
             if (! $this->form->getModel()) {
                 throw new \Exception('No model set for the editing', -1);
             }
-            
+
             $model = $this->form->getRepository()->update($this->form->getModel(), $data);
         }
 
+
         if ($model) {
             $this->form->setModel($model);
+        }
+
+
+        if (request()->ajax()) {
+            return response()->json([
+                'data' => $model,
+                'success' => true,
+                'message' => 'Model updated successfully',
+            ]);
         }
 
         return redirect()->to($this->form->getRedirectUrl($this->mode));
